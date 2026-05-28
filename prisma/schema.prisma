@@ -1,0 +1,681 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum PlatformRole {
+  SUPER_ADMIN
+  ORG_ADMIN
+  MANAGER
+  AGENT
+  ANALYST
+}
+
+enum LifecycleStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  NURTURE
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+  DORMANT
+}
+
+enum LeadSource {
+  ADS
+  REFERRAL
+  LANDING_PAGE
+  IMPORT
+  ORGANIC_SOCIAL
+  WEBSITE
+  WHATSAPP_CLICK
+  MESSENGER
+  MANUAL
+  OTHER
+}
+
+enum Channel {
+  WHATSAPP
+  MESSENGER
+  WEB_CHAT
+  EMAIL
+  SMS
+  INSTAGRAM
+  PHONE
+  IN_PERSON
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  ESCALATED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  MEETING
+  EMAIL
+  MESSAGE
+  STAGE_CHANGE
+  TASK_CREATED
+  TASK_COMPLETED
+  AI_INSIGHT
+  VISIT
+  SYSTEM
+}
+
+enum DealReadiness {
+  NOT_READY
+  NURTURE
+  WARM
+  SALES_READY
+  CLOSE_NOW
+}
+
+enum ConsentType {
+  MARKETING
+  SERVICE
+  DATA_ENRICHMENT
+}
+
+enum SubscriptionPlan {
+  STARTER
+  GROWTH
+  ENTERPRISE
+}
+
+// ─── Auth (NextAuth) ─────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  passwordHash  String?
+  platformRole  PlatformRole @default(AGENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   OrganizationMember[]
+  agentProfile  AgentProfile?
+  assignedProspects Prospect[] @relation("AssignedOwner")
+  assignedTasks Task[]     @relation("TaskAssignee")
+  createdTasks  Task[]     @relation("TaskCreator")
+  activities    Activity[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Tenant & Organization ───────────────────────────────────────────────────
+
+model Organization {
+  id        String           @id @default(cuid())
+  name      String
+  slug      String           @unique
+  plan      SubscriptionPlan @default(STARTER)
+  isActive  Boolean          @default(true)
+  settings  Json?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  members       OrganizationMember[]
+  teams         Team[]
+  companies     Company[]
+  prospects     Prospect[]
+  funnels       Funnel[]
+  conversations Conversation[]
+  campaigns     Campaign[]
+  aiAgents      AIAgent[]
+  templates     MessageTemplate[]
+  workflows     Workflow[]
+  auditLogs     AuditLog[]
+  channelConnections ChannelConnection[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           PlatformRole @default(AGENT)
+  teamId         String?
+  isActive       Boolean      @default(true)
+  joinedAt       DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team         Team?        @relation(fields: [teamId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+model Team {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      OrganizationMember[]
+  prospects    Prospect[]
+
+  @@map("teams")
+}
+
+// ─── CRM ─────────────────────────────────────────────────────────────────────
+
+model Company {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  industry       String?
+  website        String?
+  size           String?
+  location       String?
+  notes          String? @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  prospects    Prospect[]
+
+  @@map("companies")
+}
+
+model Prospect {
+  id             String         @id @default(cuid())
+  organizationId String
+  companyId      String?
+  teamId         String?
+  assignedToId   String?
+
+  firstName      String?
+  lastName       String?
+  email          String?
+  phone          String?
+  source         LeadSource     @default(MANUAL)
+  sourceDetail   String?
+  lifecycleStage LifecycleStage @default(NEW)
+  tags           String[]       @default([])
+  location       String?
+  occupation     String?
+  socialLinks    Json?
+
+  lastTouchAt    DateTime?
+  nextTouchAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company?     @relation(fields: [companyId], references: [id])
+  team         Team?        @relation(fields: [teamId], references: [id])
+  assignedTo   User?        @relation("AssignedOwner", fields: [assignedToId], references: [id])
+
+  conversations       Conversation[]
+  opportunities       Opportunity[]
+  tasks               Task[]
+  activities          Activity[]
+  personalityProfile  PersonalityProfile?
+  leadScore           LeadScore?
+  recommendations     Recommendation[]
+  enrichmentRecords   EnrichmentRecord[]
+  socialProfiles      SocialProfile[]
+  consentRecords      ConsentRecord[]
+
+  @@index([organizationId, lifecycleStage])
+  @@index([organizationId, assignedToId])
+  @@map("prospects")
+}
+
+// ─── Funnel & Pipeline ───────────────────────────────────────────────────────
+
+model Funnel {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  isDefault      Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages        FunnelStage[]
+  opportunities Opportunity[]
+
+  @@map("funnels")
+}
+
+model FunnelStage {
+  id          String @id @default(cuid())
+  funnelId    String
+  name        String
+  order       Int
+  probability Float  @default(0)
+  color       String?
+
+  funnel        Funnel        @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@unique([funnelId, order])
+  @@map("funnel_stages")
+}
+
+model Opportunity {
+  id             String            @id @default(cuid())
+  prospectId     String
+  funnelId       String
+  stageId        String
+  title          String
+  value          Float?
+  currency       String            @default("USD")
+  expectedClose  DateTime?
+  status         OpportunityStatus @default(OPEN)
+  winLossReason  String?
+  competitorNotes String?          @db.Text
+  nextStep       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  prospect Prospect    @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  funnel   Funnel      @relation(fields: [funnelId], references: [id])
+  stage    FunnelStage @relation(fields: [stageId], references: [id])
+
+  @@map("opportunities")
+}
+
+// ─── Messaging ───────────────────────────────────────────────────────────────
+
+model ChannelConnection {
+  id             String  @id @default(cuid())
+  organizationId String
+  channel        Channel
+  name           String
+  externalId     String?
+  credentials    Json?
+  isActive       Boolean @default(true)
+  settings       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@unique([organizationId, channel, externalId])
+  @@map("channel_connections")
+}
+
+model Conversation {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  prospectId          String
+  channelConnectionId String?
+  channel             Channel
+  status              ConversationStatus @default(OPEN)
+  externalThreadId    String?
+  lastMessageAt       DateTime?
+  aiHandled           Boolean            @default(false)
+  escalatedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  prospect          Prospect           @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  channelConnection ChannelConnection? @relation(fields: [channelConnectionId], references: [id])
+  messages          Message[]
+
+  @@index([organizationId, status])
+  @@map("conversations")
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  direction      MessageDirection
+  content        String           @db.Text
+  contentType    String           @default("text")
+  status         MessageStatus    @default(PENDING)
+  externalId     String?
+  templateId     String?
+  metadata       Json?
+  sentAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  template     MessageTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MessageTemplate {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  channel        Channel
+  category       String?
+  content        String  @db.Text
+  variables      String[] @default([])
+  isApproved     Boolean @default(false)
+  language       String  @default("en")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     Message[]
+
+  @@map("message_templates")
+}
+
+// ─── Tasks & Activities ──────────────────────────────────────────────────────
+
+model Task {
+  id          String       @id @default(cuid())
+  prospectId  String?
+  assigneeId  String?
+  creatorId   String?
+  title       String
+  description String?      @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  prospect Prospect? @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  assignee User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User?     @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  @@index([assigneeId, status])
+  @@map("tasks")
+}
+
+model Activity {
+  id         String       @id @default(cuid())
+  prospectId String
+  userId     String?
+  type       ActivityType
+  title      String
+  body       String?      @db.Text
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([prospectId, createdAt])
+  @@map("activities")
+}
+
+// ─── AI & Profiling ──────────────────────────────────────────────────────────
+
+model AgentProfile {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  bio          String?
+  specialties  String[] @default([])
+  languages    String[] @default(["en"])
+  maxLeads     Int     @default(50)
+  isAvailable  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("agent_profiles")
+}
+
+model AIAgent {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  persona        String? @db.Text
+  tone           String?
+  language       String  @default("en")
+  isActive       Boolean @default(true)
+  config         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_agents")
+}
+
+model PersonalityProfile {
+  id               String @id @default(cuid())
+  prospectId       String @unique
+  personaType      String?
+  decisionStyle    String?
+  urgencyScore     Float  @default(0)
+  trustScore       Float  @default(0)
+  budgetSensitivity Float @default(0)
+  communicationPref String?
+  preferredChannel Channel?
+  preferredStyle   String?
+  commonObjections String[] @default([])
+  dealReadiness    DealReadiness @default(NURTURE)
+  confidenceScore  Float  @default(0)
+  rawAnalysis      Json?
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("personality_profiles")
+}
+
+model LeadScore {
+  id                  String @id @default(cuid())
+  prospectId          String @unique
+  profileFitScore     Float  @default(0)
+  intentScore         Float  @default(0)
+  engagementScore     Float  @default(0)
+  urgencyScore        Float  @default(0)
+  conversionProb      Float  @default(0)
+  churnRiskScore      Float  @default(0)
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("lead_scores")
+}
+
+model Recommendation {
+  id         String   @id @default(cuid())
+  prospectId String
+  action     String
+  reason     String?  @db.Text
+  priority   Int      @default(0)
+  isApplied  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime?
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@index([prospectId, isApplied])
+  @@map("recommendations")
+}
+
+model EnrichmentRecord {
+  id         String   @id @default(cuid())
+  prospectId String
+  source     String
+  data       Json
+  createdAt  DateTime @default(now())
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("enrichment_records")
+}
+
+model SocialProfile {
+  id         String   @id @default(cuid())
+  prospectId String
+  platform   String
+  profileUrl String?
+  handle     String?
+  signals    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("social_profiles")
+}
+
+// ─── Campaign & Workflow (Phase 2 foundations) ───────────────────────────────
+
+model Campaign {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  status         String   @default("draft")
+  config         Json?
+  startedAt      DateTime?
+  endedAt        DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("campaigns")
+}
+
+model Workflow {
+  id             String  @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  trigger        Json
+  steps          Json
+  isActive       Boolean @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("workflows")
+}
+
+// ─── Compliance & Audit ──────────────────────────────────────────────────────
+
+model ConsentRecord {
+  id         String      @id @default(cuid())
+  prospectId String
+  type       ConsentType
+  granted    Boolean
+  channel    Channel?
+  recordedAt DateTime    @default(now())
+  metadata   Json?
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@map("consent_records")
+}
+
+model AuditLog {
+  id             String  @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String?
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
