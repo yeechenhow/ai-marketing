@@ -1,13 +1,24 @@
 import { requireOrgSession } from "@/lib/org";
+import { getOrgAiSettings, getPublicAiSettings, resolveAiConfig } from "@/lib/ai/settings";
+import {
+  getOAuthProviderStatusForOrg,
+  getOrgOnboardingSettings,
+} from "@/lib/onboarding/org-settings";
 import { PageHeader } from "@/components/layout/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export default async function OrgSettingsPage() {
   const { organization } = await requireOrgSession();
+  const orgAi = await getOrgAiSettings(organization.id);
+  const publicAi = getPublicAiSettings(orgAi);
+  const resolved = await resolveAiConfig(organization.id);
+  const onboarding = await getOrgOnboardingSettings(organization.id);
+  const oauthStatus = await getOAuthProviderStatusForOrg(organization.id);
 
   return (
     <div>
@@ -79,11 +90,57 @@ export default async function OrgSettingsPage() {
             <CardTitle>AI Configuration</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-slate-600">
-            <SettingRow label="Default LLM" value="Not configured" />
-            <SettingRow label="Confidence threshold" value="0.75" />
-            <SettingRow label="Human approval for offers" value="Enabled" />
-            <Button variant="outline" size="sm" className="mt-2">
-              AI settings
+            <SettingRow
+              label="Default LLM"
+              value={
+                resolved
+                  ? `${resolved.provider} · ${resolved.model}`
+                  : "Not configured"
+              }
+            />
+            <SettingRow label="Org API key" value={publicAi.apiKeyMask} />
+            <SettingRow
+              label="Status"
+              value={
+                <Badge variant={resolved ? "success" : "warning"}>
+                  {resolved ? "Ready" : "Needs API key"}
+                </Badge>
+              }
+            />
+            <Button variant="outline" size="sm" className="mt-2" asChild>
+              <Link href="/org/ai-settings">Configure AI settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Onboarding & OAuth</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-slate-600">
+            <SettingRow
+              label="Google sign-in"
+              value={
+                <Badge variant={oauthStatus.google ? "success" : "warning"}>
+                  {oauthStatus.google ? "Ready" : "Not configured"}
+                </Badge>
+              }
+            />
+            <SettingRow
+              label="Facebook sign-in"
+              value={
+                <Badge variant={oauthStatus.facebook ? "success" : "warning"}>
+                  {oauthStatus.facebook ? "Ready" : "Not configured"}
+                </Badge>
+              }
+            />
+            <SettingRow
+              label="WhatsApp API"
+              value={
+                onboarding?.whatsapp?.accessToken ? "Configured" : "Not configured"
+              }
+            />
+            <Button variant="outline" size="sm" className="mt-2" asChild>
+              <Link href="/org/onboarding-settings">Configure onboarding</Link>
             </Button>
           </CardContent>
         </Card>

@@ -29,6 +29,10 @@ export default async function ProspectDetailPage({
     include: {
       assignedTo: true,
       company: true,
+      socialIdentities: true,
+      socialProfiles: true,
+      enrichmentRecords: { orderBy: { createdAt: "desc" }, take: 5 },
+      consentRecords: { orderBy: { recordedAt: "desc" }, take: 3 },
       activities: { orderBy: { createdAt: "desc" }, take: 20, include: { user: true } },
       tasks: { where: { status: { not: "CANCELLED" } }, orderBy: { dueAt: "asc" } },
       personalityProfile: true,
@@ -51,8 +55,14 @@ export default async function ProspectDetailPage({
           prospect.lastName,
           prospect.email,
           prospect.phone,
+          prospect.whatsappName,
+          prospect.whatsappPhone,
         )}
-        description={[prospect.email, prospect.phone, prospect.occupation]
+        description={[
+          prospect.email,
+          prospect.phone ?? prospect.whatsappPhone,
+          prospect.occupation,
+        ]
           .filter(Boolean)
           .join(" · ")}
         actions={
@@ -69,6 +79,12 @@ export default async function ProspectDetailPage({
         <Badge className={LIFECYCLE_STAGE_COLORS[prospect.lifecycleStage]}>
           {LIFECYCLE_STAGE_LABELS[prospect.lifecycleStage]}
         </Badge>
+        {prospect.registrationCompletedAt && (
+          <Badge variant="success">Customer 360 registered</Badge>
+        )}
+        {prospect.whatsappPhone && (
+          <Badge variant="secondary">WhatsApp onboarding</Badge>
+        )}
         {prospect.tags.map((tag) => (
           <Badge key={tag} variant="secondary">
             {tag}
@@ -110,6 +126,48 @@ export default async function ProspectDetailPage({
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Customer 360</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <ProfileRow label="WhatsApp name" value={prospect.whatsappName} />
+              <ProfileRow label="WhatsApp phone" value={prospect.whatsappPhone} />
+              <ProfileRow
+                label="Registration"
+                value={
+                  prospect.registrationCompletedAt
+                    ? formatDistanceToNow(prospect.registrationCompletedAt, { addSuffix: true })
+                    : "Pending — user has not completed OAuth"
+                }
+              />
+              <ProfileRow label="Source" value={prospect.sourceDetail ?? prospect.source} />
+              {prospect.socialIdentities.map((identity) => (
+                <div key={identity.id} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <p className="font-medium capitalize text-slate-900">
+                    {identity.platformName.toLowerCase()}
+                  </p>
+                  <p className="text-xs text-slate-500">UID: {identity.platformUid}</p>
+                </div>
+              ))}
+              {prospect.socialProfiles.map((sp) => {
+                const signals = sp.signals as Record<string, unknown> | null;
+                const email = signals?.email ? String(signals.email) : null;
+                const name = signals?.name ? String(signals.name) : null;
+                if (!email && !name) return null;
+                return (
+                  <div key={sp.id} className="text-xs text-slate-600">
+                    {email && <p>Email: {email}</p>}
+                    {name && <p>Name: {name}</p>}
+                  </div>
+                );
+              })}
+              {prospect.socialIdentities.length === 0 && !prospect.whatsappPhone && (
+                <p className="text-slate-500">No onboarding data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
           {profile ? (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">

@@ -3,10 +3,11 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canAccessOrgPortal } from "@/lib/roles";
-import type { Channel, PlatformRole } from "@/generated/prisma/client";
+import type { Channel, PlatformRole, Prisma } from "@/generated/prisma/client";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createWhatsAppOnboardingConfig } from "@/lib/onboarding/campaign-config";
 import { z } from "zod";
 
 async function requireOrgAdmin() {
@@ -143,6 +144,11 @@ export async function toggleChannelStatus(channelId: string) {
 const campaignSchema = z.object({
   name: z.string().min(1, "Campaign name is required"),
   description: z.string().optional(),
+  campaignType: z.enum(["standard", "whatsapp_onboarding"]).default("standard"),
+  prefilledMessage: z.string().optional(),
+  businessPhone: z.string().optional(),
+  channelConnectionId: z.string().optional(),
+  welcomeMessage: z.string().optional(),
 });
 
 const aiAgentSchema = z.object({
@@ -170,19 +176,44 @@ export async function createCampaign(formData: FormData) {
   const parsed = campaignSchema.parse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
+    campaignType: formData.get("campaignType") || "standard",
+    prefilledMessage: (formData.get("prefilledMessage") as string)?.trim() || undefined,
+    businessPhone: (formData.get("businessPhone") as string)?.trim() || undefined,
+    channelConnectionId: (formData.get("channelConnectionId") as string)?.trim() || undefined,
+    welcomeMessage: (formData.get("welcomeMessage") as string)?.trim() || undefined,
   });
 
-  await db.campaign.create({
+  if (parsed.campaignType === "whatsapp_onboarding" && !parsed.prefilledMessage) {
+    throw new Error("Prefilled WhatsApp message is required for onboarding campaigns");
+  }
+
+  const config =
+    parsed.campaignType === "whatsapp_onboarding"
+      ? createWhatsAppOnboardingConfig({
+          prefilledMessage: parsed.prefilledMessage!,
+          businessPhone: parsed.businessPhone,
+          channelConnectionId: parsed.channelConnectionId,
+          welcomeMessage: parsed.welcomeMessage,
+        })
+      : undefined;
+
+  const campaign = await db.campaign.create({
     data: {
       organizationId: session.user.organizationId!,
       name: parsed.name,
       description: parsed.description,
-      status: "draft",
+      status: parsed.campaignType === "whatsapp_onboarding" ? "active" : "draft",
+      startedAt: parsed.campaignType === "whatsapp_onboarding" ? new Date() : undefined,
+      config: config as Prisma.InputJsonValue | undefined,
     },
   });
 
   revalidatePath("/org/campaigns");
-  redirect("/org/campaigns");
+  redirect(
+    parsed.campaignType === "whatsapp_onboarding"
+      ? `/org/campaigns/${campaign.id}`
+      : "/org/campaigns",
+  );
 }
 
 export async function launchCampaign(campaignId: string) {

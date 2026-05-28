@@ -16,7 +16,9 @@ export function prospectDisplayName(
   lastName?: string | null,
   email?: string | null,
   phone?: string | null,
+  whatsappName?: string | null,
+  whatsappPhone?: string | null,
 ) {
   const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-  return name || email || phone || "Unknown prospect";
+  return name || whatsappName || email || phone || whatsappPhone || "Unknown prospect";
 }

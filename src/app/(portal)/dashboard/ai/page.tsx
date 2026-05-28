@@ -38,7 +38,7 @@ export default async function AIInsightsPage() {
     <div>
       <PageHeader
         title="AI Insights"
-        description="Personality profiles, lead scores, and next-best-actions"
+        description="Personality profiles, lead scores, and next-best-actions powered by your org LLM"
       />
 
       <div className="mb-8 grid gap-4 sm:grid-cols-3">

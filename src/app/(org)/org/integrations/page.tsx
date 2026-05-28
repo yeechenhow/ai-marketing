@@ -78,11 +78,13 @@ export default async function OrgIntegrationsPage() {
                   <Link
                     href={
                       item.name === "Meta Business Suite"
-                        ? "/org/channels/new?channel=WHATSAPP"
-                        : "/org/channels"
+                        ? "/org/onboarding-settings"
+                        : item.name === "Zapier / Webhooks"
+                          ? "/org/campaigns"
+                          : "/org/channels"
                     }
                   >
-                    Connect
+                    {item.name === "Zapier / Webhooks" ? "View campaigns" : "Configure"}
                   </Link>
                 </Button>
               ) : (

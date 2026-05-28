@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { PageHeader, StatCard } from "@/components/layout/shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LIFECYCLE_STAGE_COLORS, LIFECYCLE_STAGE_LABELS, ROLE_LABELS } from "@/lib/constants";
 import { prospectDisplayName } from "@/lib/utils";
 import Link from "next/link";
@@ -142,8 +143,8 @@ export default async function OrgOverviewPage() {
       <Card className="mt-6">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Prospects</CardTitle>
-          <Link href="/dashboard/prospects" className="text-sm text-emerald-600 hover:underline">
-            Open in Agent Portal
+          <Link href="/org/prospects" className="text-sm text-emerald-600 hover:underline">
+            View all prospects
           </Link>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -154,7 +155,7 @@ export default async function OrgOverviewPage() {
             >
               <div>
                 <p className="font-medium text-slate-900">
-                  {prospectDisplayName(p.firstName, p.lastName, p.email, p.phone)}
+                  {prospectDisplayName(p.firstName, p.lastName, p.email, p.phone, p.whatsappName, p.whatsappPhone)}
                 </p>
                 <p className="text-xs text-slate-500">
                   {p.assignedTo?.name ?? "Unassigned"} ·{" "}
@@ -170,6 +171,9 @@ export default async function OrgOverviewPage() {
                 <Badge className={LIFECYCLE_STAGE_COLORS[p.lifecycleStage]}>
                   {LIFECYCLE_STAGE_LABELS[p.lifecycleStage]}
                 </Badge>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/org/prospects/${p.id}`}>Customer 360</Link>
+                </Button>
               </div>
             </div>
           ))}

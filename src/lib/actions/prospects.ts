@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { DealReadiness, LeadSource, LifecycleStage } from "@/generated/prisma/client";
+import { generateProspectProfileWithAi } from "@/lib/ai/generate-prospect-profile";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -127,64 +128,6 @@ export async function updateProspect(prospectId: string, formData: FormData) {
   redirect(`/dashboard/prospects/${prospectId}`);
 }
 
-function inferProfile(prospect: {
-  source: LeadSource;
-  occupation: string | null;
-  tags: string[];
-  lifecycleStage: LifecycleStage;
-}) {
-  const priceSensitive = prospect.tags.some((t) =>
-    ["price-sensitive", "budget"].includes(t.toLowerCase()),
-  );
-  const isInbound = ["WHATSAPP_CLICK", "MESSENGER", "LANDING_PAGE", "WEBSITE"].includes(
-    prospect.source,
-  );
-
-  let personaType = "balanced-buyer";
-  let decisionStyle = "logic-driven";
-  let dealReadiness: DealReadiness = "NURTURE";
-  let conversionProb = 0.35;
-
-  if (prospect.lifecycleStage === "QUALIFIED" || prospect.lifecycleStage === "PROPOSAL") {
-    dealReadiness = "SALES_READY";
-    conversionProb = 0.65;
-    personaType = "fast-decider";
-  } else if (prospect.lifecycleStage === "NURTURE") {
-    dealReadiness = "NURTURE";
-    conversionProb = 0.4;
-    personaType = "cautious-buyer";
-    decisionStyle = "emotion-driven";
-  } else if (isInbound) {
-    dealReadiness = "WARM";
-    conversionProb = 0.5;
-    personaType = "social-proof-buyer";
-    decisionStyle = "needs-guidance";
-  }
-
-  if (priceSensitive) {
-    decisionStyle = "value-focused";
-    conversionProb -= 0.1;
-  }
-
-  return {
-    personaType,
-    decisionStyle,
-    urgencyScore: isInbound ? 0.65 : 0.4,
-    trustScore: isInbound ? 0.55 : 0.35,
-    budgetSensitivity: priceSensitive ? 0.8 : 0.35,
-    communicationPref: decisionStyle.includes("logic") ? "concise" : "detailed",
-    dealReadiness,
-    confidenceScore: 0.72,
-    conversionProb: Math.max(0.1, Math.min(0.95, conversionProb)),
-    nextAction:
-      dealReadiness === "SALES_READY"
-        ? "Book demo or send proposal"
-        : dealReadiness === "WARM"
-          ? "Ask qualification question about timeline"
-          : "Send nurture content — case study or social proof",
-  };
-}
-
 export async function generateProspectProfile(prospectId: string) {
   const session = await requireOrgUser();
 
@@ -193,7 +136,26 @@ export async function generateProspectProfile(prospectId: string) {
   });
   if (!prospect) throw new Error("Prospect not found");
 
-  const profile = inferProfile(prospect);
+  const recentNote = await db.activity.findFirst({
+    where: { prospectId, type: "NOTE" },
+    orderBy: { createdAt: "desc" },
+    select: { body: true },
+  });
+
+  const { profile, usedAi } = await generateProspectProfileWithAi(
+    session.user.organizationId!,
+    {
+      firstName: prospect.firstName,
+      lastName: prospect.lastName,
+      email: prospect.email,
+      phone: prospect.phone,
+      source: prospect.source,
+      lifecycleStage: prospect.lifecycleStage,
+      occupation: prospect.occupation,
+      tags: prospect.tags,
+      recentNotes: recentNote?.body ?? undefined,
+    },
+  );
 
   await db.personalityProfile.upsert({
     where: { prospectId },
@@ -205,7 +167,7 @@ export async function generateProspectProfile(prospectId: string) {
       trustScore: profile.trustScore,
       budgetSensitivity: profile.budgetSensitivity,
       communicationPref: profile.communicationPref,
-      dealReadiness: profile.dealReadiness,
+      dealReadiness: profile.dealReadiness as DealReadiness,
       confidenceScore: profile.confidenceScore,
     },
     update: {
@@ -215,7 +177,7 @@ export async function generateProspectProfile(prospectId: string) {
       trustScore: profile.trustScore,
       budgetSensitivity: profile.budgetSensitivity,
       communicationPref: profile.communicationPref,
-      dealReadiness: profile.dealReadiness,
+      dealReadiness: profile.dealReadiness as DealReadiness,
       confidenceScore: profile.confidenceScore,
     },
   });
@@ -224,7 +186,7 @@ export async function generateProspectProfile(prospectId: string) {
     where: { prospectId },
     create: {
       prospectId,
-      profileFitScore: 0.65,
+      profileFitScore: profile.confidenceScore,
       intentScore: profile.urgencyScore,
       engagementScore: 0.5,
       urgencyScore: profile.urgencyScore,
@@ -232,6 +194,7 @@ export async function generateProspectProfile(prospectId: string) {
       churnRiskScore: 1 - profile.trustScore,
     },
     update: {
+      profileFitScore: profile.confidenceScore,
       intentScore: profile.urgencyScore,
       urgencyScore: profile.urgencyScore,
       conversionProb: profile.conversionProb,
@@ -247,7 +210,9 @@ export async function generateProspectProfile(prospectId: string) {
     data: {
       prospectId,
       action: profile.nextAction,
-      reason: "Generated from prospect source, stage, and tag signals",
+      reason: profile.summary ?? (usedAi
+        ? "Generated by AI from prospect signals and conversation context"
+        : "Generated from prospect source, stage, and tag signals (AI fallback)"),
       priority: 1,
     },
   });
@@ -257,8 +222,8 @@ export async function generateProspectProfile(prospectId: string) {
       prospectId,
       userId: session.user.id,
       type: "AI_INSIGHT",
-      title: "AI personality profile generated",
-      body: `Classified as ${profile.personaType} · ${profile.decisionStyle}`,
+      title: usedAi ? "AI personality profile generated (LLM)" : "AI personality profile generated",
+      body: profile.summary ?? `Classified as ${profile.personaType} · ${profile.decisionStyle}`,
     },
   });
 

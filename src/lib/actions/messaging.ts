@@ -3,6 +3,8 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import type { Channel } from "@/generated/prisma/client";
+import { suggestReplyWithAi } from "@/lib/ai/suggest-reply";
+import { prospectDisplayName } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -128,4 +130,42 @@ export async function startConversation(prospectId: string, formData: FormData) 
 
   revalidatePath("/dashboard/inbox");
   redirect(`/dashboard/inbox/${conversation.id}`);
+}
+
+export async function suggestReply(conversationId: string): Promise<{ suggestion: string }> {
+  const session = await requireOrgUser();
+
+  const conversation = await db.conversation.findFirst({
+    where: { id: conversationId, organizationId: session.user.organizationId! },
+    include: {
+      prospect: {
+        include: {
+          personalityProfile: true,
+          recommendations: { where: { isApplied: false }, orderBy: { priority: "asc" }, take: 1 },
+        },
+      },
+      messages: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!conversation) throw new Error("Conversation not found");
+
+  const p = conversation.prospect;
+  const name = prospectDisplayName(p.firstName, p.lastName, p.email, p.phone);
+
+  const suggestion = await suggestReplyWithAi(session.user.organizationId!, {
+    prospectName: name,
+    channel: conversation.channel,
+    occupation: p.occupation,
+    lifecycleStage: p.lifecycleStage,
+    personaType: p.personalityProfile?.personaType,
+    decisionStyle: p.personalityProfile?.decisionStyle,
+    dealReadiness: p.personalityProfile?.dealReadiness,
+    nextAction: p.recommendations[0]?.action,
+    messages: conversation.messages.map((m) => ({
+      direction: m.direction,
+      content: m.content,
+    })),
+  });
+
+  return { suggestion };
 }

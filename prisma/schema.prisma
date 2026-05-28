@@ -121,6 +121,11 @@ enum ConsentType {
   DATA_ENRICHMENT
 }
 
+enum SocialPlatform {
+  GOOGLE
+  FACEBOOK
+}
+
 enum SubscriptionPlan {
   STARTER
   GROWTH
@@ -281,6 +286,8 @@ model Prospect {
   lastName       String?
   email          String?
   phone          String?
+  whatsappPhone  String?
+  whatsappName   String?
   source         LeadSource     @default(MANUAL)
   sourceDetail   String?
   lifecycleStage LifecycleStage @default(NEW)
@@ -291,6 +298,7 @@ model Prospect {
 
   lastTouchAt    DateTime?
   nextTouchAt    DateTime?
+  registrationCompletedAt DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -308,8 +316,11 @@ model Prospect {
   recommendations     Recommendation[]
   enrichmentRecords   EnrichmentRecord[]
   socialProfiles      SocialProfile[]
+  socialIdentities    SocialIdentity[]
   consentRecords      ConsentRecord[]
 
+  @@unique([organizationId, whatsappPhone])
+  @@unique([organizationId, email])
   @@index([organizationId, lifecycleStage])
   @@index([organizationId, assignedToId])
   @@map("prospects")
@@ -609,6 +620,25 @@ model SocialProfile {
   prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
 
   @@map("social_profiles")
+}
+
+model SocialIdentity {
+  id           String         @id @default(cuid())
+  prospectId   String
+  platformName SocialPlatform
+  platformUid  String
+  accessToken  String?        @db.Text
+  refreshToken String?        @db.Text
+  tokenExpiresAt DateTime?
+  rawPayload   Json
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  prospect Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+
+  @@unique([prospectId, platformName])
+  @@index([platformName, platformUid])
+  @@map("social_identities")
 }
 
 // ─── Campaign & Workflow (Phase 2 foundations) ───────────────────────────────

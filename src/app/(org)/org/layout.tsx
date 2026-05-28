@@ -12,6 +12,8 @@ import {
   BarChart3,
   Plug,
   Settings,
+  Sparkles,
+  UserPlus,
 } from "lucide-react";
 
 const navItems = [
@@ -20,7 +22,10 @@ const navItems = [
   { href: "/org/channels", label: "Channels", icon: <Radio className="h-4 w-4" /> },
   { href: "/org/pipelines", label: "Pipelines", icon: <Kanban className="h-4 w-4" /> },
   { href: "/org/campaigns", label: "Campaigns", icon: <Megaphone className="h-4 w-4" /> },
+  { href: "/org/prospects", label: "Prospects", icon: <UserPlus className="h-4 w-4" /> },
+  { href: "/org/onboarding-settings", label: "Onboarding", icon: <Plug className="h-4 w-4" /> },
   { href: "/org/ai-agents", label: "AI Agents", icon: <Bot className="h-4 w-4" /> },
+  { href: "/org/ai-settings", label: "AI Settings", icon: <Sparkles className="h-4 w-4" /> },
   { href: "/org/templates", label: "Templates", icon: <FileText className="h-4 w-4" /> },
   { href: "/org/reports", label: "Reports", icon: <BarChart3 className="h-4 w-4" /> },
   { href: "/org/integrations", label: "Integrations", icon: <Plug className="h-4 w-4" /> },

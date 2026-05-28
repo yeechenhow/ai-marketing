@@ -44,7 +44,9 @@ export default async function OrgCampaignsPage() {
               {campaigns.map((c) => (
                 <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-slate-900">{c.name}</p>
+                    <Link href={`/org/campaigns/${c.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                      {c.name}
+                    </Link>
                     {c.description && (
                       <p className="text-xs text-slate-500">{c.description}</p>
                     )}
