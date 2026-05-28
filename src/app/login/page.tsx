@@ -20,26 +20,28 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
 
-    setLoading(false);
+      if (result?.error) {
+        setError("Invalid email or password");
+        return;
+      }
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      return;
+      const session = await getSession();
+      const path = session?.user ? getPortalPath(session.user) : "/dashboard";
+
+      router.push(path);
+      router.refresh();
+    } catch {
+      setError("Sign in failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    const session = await getSession();
-    const path = session?.user
-      ? getPortalPath(session.user)
-      : "/dashboard";
-
-    router.push(path);
-    router.refresh();
   }
 
   return (

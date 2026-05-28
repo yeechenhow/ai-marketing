@@ -37,5 +37,5 @@ export function getFacebookOAuthConfig() {
 }
 
 export function oauthCallbackUrl(provider: "google" | "facebook"): string {
-  return `${getAppBaseUrl()}/api/auth/callback/${provider}`;
+  return `${getAppBaseUrl()}/api/onboarding/callback/${provider}`;
 }
