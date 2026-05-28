@@ -12,7 +12,7 @@ npm install
 
 echo "==> Syncing database schema..."
 npx prisma generate
-npx prisma db push
+npx prisma db push --accept-data-loss
 
 echo "==> Building app..."
 npm run build
