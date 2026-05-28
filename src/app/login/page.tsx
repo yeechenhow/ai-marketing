@@ -10,8 +10,12 @@ import { getPortalPath } from "@/lib/roles";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@demo.com");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState(
+    process.env.NODE_ENV === "development" ? "admin@demo.com" : "",
+  );
+  const [password, setPassword] = useState(
+    process.env.NODE_ENV === "development" ? "demo1234" : "",
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -83,15 +87,19 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-xs text-slate-400">
-            Demo accounts (password: demo1234)
-          </p>
-          <div className="mt-2 space-y-1 text-center text-xs text-slate-400">
-            <p>platform@demo.com — Super Admin</p>
-            <p>admin@demo.com — Org Admin</p>
-            <p>manager@demo.com — Manager</p>
-            <p>agent@demo.com — Agent</p>
-          </div>
+          {process.env.NODE_ENV === "development" && (
+            <>
+              <p className="mt-4 text-center text-xs text-slate-400">
+                Demo accounts (password: demo1234)
+              </p>
+              <div className="mt-2 space-y-1 text-center text-xs text-slate-400">
+                <p>platform@demo.com — Super Admin</p>
+                <p>admin@demo.com — Org Admin</p>
+                <p>manager@demo.com — Manager</p>
+                <p>agent@demo.com — Agent</p>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

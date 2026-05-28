@@ -8,6 +8,18 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const db = new PrismaClient({ adapter });
 
 async function main() {
+  if (process.env.SEED_DEMO_DATA === "false") {
+    console.log("Demo seed skipped (SEED_DEMO_DATA=false).");
+    return;
+  }
+
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "true") {
+    console.log("Demo seed skipped in production.");
+    console.log("Use scripts/create-admin.ts to create real admin users.");
+    console.log("To override: ALLOW_DEMO_SEED=true npm run db:seed");
+    return;
+  }
+
   const passwordHash = await bcrypt.hash("demo1234", 10);
 
   const platformAdmin = await db.user.upsert({

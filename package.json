@@ -14,6 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "admin:create": "tsx scripts/create-admin.ts",
+    "admin:remove-demo": "tsx scripts/remove-demo-users.ts",
     "db:studio": "prisma studio",
     "db:setup": "npm run db:push && npm run db:seed",
     "setup": "npm run db:push && npm run db:seed",
