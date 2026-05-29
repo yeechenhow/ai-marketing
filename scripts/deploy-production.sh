@@ -14,6 +14,9 @@ echo "==> Syncing database schema..."
 npx prisma generate
 npx prisma db push --accept-data-loss
 
+echo "==> Seeding demo data..."
+ALLOW_DEMO_SEED=true npm run db:seed
+
 echo "==> Building app..."
 npm run build
 

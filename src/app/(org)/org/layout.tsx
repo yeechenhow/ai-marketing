@@ -14,6 +14,7 @@ import {
   Settings,
   Sparkles,
   UserPlus,
+  GitBranch,
 } from "lucide-react";
 
 const navItems = [
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/org/team", label: "Team", icon: <Users className="h-4 w-4" /> },
   { href: "/org/channels", label: "Channels", icon: <Radio className="h-4 w-4" /> },
   { href: "/org/pipelines", label: "Pipelines", icon: <Kanban className="h-4 w-4" /> },
+  { href: "/org/workflows", label: "Workflows", icon: <GitBranch className="h-4 w-4" /> },
   { href: "/org/campaigns", label: "Campaigns", icon: <Megaphone className="h-4 w-4" /> },
   { href: "/org/prospects", label: "Prospects", icon: <UserPlus className="h-4 w-4" /> },
   { href: "/org/onboarding-settings", label: "Onboarding", icon: <Plug className="h-4 w-4" /> },
@@ -47,7 +49,7 @@ export default async function OrgLayout({
         items={navItems}
       />
       <div className="flex flex-1 flex-col">
-        <PortalHeader portalLabel="Company Admin Portal" showAgentLink />
+        <PortalHeader portalLabel="Company Admin Portal" showAgentLink showAgencyLink />
         <main className="flex-1 overflow-auto p-8">{children}</main>
       </div>
     </div>

@@ -12,6 +12,10 @@ import { buildWhatsAppOnboardingQrUrl } from "@/lib/onboarding/qr-link";
 import { getAppBaseUrl } from "@/lib/onboarding/config";
 import { LaunchCampaignButton } from "@/components/org/launch-campaign-button";
 import { TestOnboardingButton } from "@/components/org/test-onboarding-button";
+import { CampaignLinksForm } from "@/components/org/campaign-links-form";
+import { TrackedLinksPanel } from "@/components/org/tracked-links-panel";
+import { listCampaignTrackedLinks } from "@/lib/workflows/load-tracked-links";
+import { FUNNEL_CHANNEL_LABELS } from "@/lib/workflows/types";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { notFound } from "next/navigation";
@@ -24,9 +28,29 @@ export default async function OrgCampaignDetailPage({
   const { id } = await params;
   const { organization } = await requireOrgSession();
 
-  const campaign = await db.campaign.findFirst({
-    where: { id, organizationId: organization.id },
-  });
+  const [campaign, funnels, workflows, trackedLinksResult] = await Promise.all([
+    db.campaign.findFirst({
+      where: { id, organizationId: organization.id },
+      include: {
+        funnel: { select: { id: true, name: true, channelType: true } },
+        workflow: { select: { id: true, name: true, isActive: true } },
+      },
+    }),
+    db.funnel.findMany({
+      where: { organizationId: organization.id },
+      select: { id: true, name: true, channelType: true },
+      orderBy: { name: "asc" },
+    }),
+    db.workflow.findMany({
+      where: { organizationId: organization.id },
+      select: { id: true, name: true, funnelId: true, isActive: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+    listCampaignTrackedLinks(organization.id, id),
+  ]);
+
+  const trackedLinks = trackedLinksResult.links;
+  const trackedLinksNeedsRefresh = trackedLinksResult.needsClientRefresh;
 
   if (!campaign) notFound();
 
@@ -67,10 +91,69 @@ export default async function OrgCampaignDetailPage({
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Badge variant="secondary">{campaign.status}</Badge>
         {isOnboarding && <Badge variant="success">WhatsApp onboarding hook</Badge>}
+        {campaign.funnel && (
+          <Badge variant="secondary">
+            {campaign.funnel.name} · {FUNNEL_CHANNEL_LABELS[campaign.funnel.channelType]}
+          </Badge>
+        )}
+        {campaign.workflow && (
+          <Badge variant={campaign.workflow.isActive ? "success" : "warning"}>
+            Workflow: {campaign.workflow.name}
+            {campaign.workflow.isActive ? " (active)" : " (draft)"}
+          </Badge>
+        )}
         <span className="text-sm text-slate-500">
           Created {formatDistanceToNow(campaign.createdAt, { addSuffix: true })}
         </span>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Funnel & workflow automation</CardTitle>
+          {campaign.workflow && (
+            <Link
+              href={`/org/workflows/${campaign.workflow.id}`}
+              className="text-xs text-indigo-600 hover:underline"
+            >
+              Open workflow builder
+            </Link>
+          )}
+        </CardHeader>
+        <CardContent className="max-w-lg">
+          <CampaignLinksForm
+            campaignId={campaign.id}
+            currentFunnelId={campaign.funnelId}
+            currentWorkflowId={campaign.workflowId}
+            funnels={funnels}
+            workflows={workflows}
+          />
+          {campaign.workflow && !campaign.workflow.isActive && (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              This workflow is a draft. Open the builder and click <strong>Activate</strong> so
+              enrolled prospects actually run through the steps.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Tracked promotion links</CardTitle>
+        </CardHeader>
+        <CardContent className="max-w-lg">
+          {trackedLinksNeedsRefresh && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Tracked links need a dev server restart. Stop <code className="rounded bg-amber-100 px-1">npm run dev</code>{" "}
+              and start it again, then refresh this page.
+            </p>
+          )}
+          <TrackedLinksPanel
+            campaignId={campaign.id}
+            links={trackedLinks}
+            baseUrl={baseUrl}
+          />
+        </CardContent>
+      </Card>
 
       {isOnboarding ? (
         <div className="grid gap-6 lg:grid-cols-2">

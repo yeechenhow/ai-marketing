@@ -17,6 +17,7 @@
     "admin:create": "tsx scripts/create-admin.ts",
     "admin:remove-demo": "tsx scripts/remove-demo-users.ts",
     "db:studio": "prisma studio",
+    "worker": "node worker.mjs",
     "db:setup": "npm run db:push && npm run db:seed",
     "setup": "npm run db:push && npm run db:seed",
     "postinstall": "prisma generate"
@@ -33,6 +34,7 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@xyflow/react": "^12.10.2",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -93,6 +93,31 @@ enum OpportunityStatus {
   LOST
 }
 
+enum FunnelChannel {
+  GENERIC
+  FACEBOOK
+  YOUTUBE
+  PROMOTION_URL
+  WHATSAPP
+  SMS
+  EMAIL
+  INSTAGRAM
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum StepExecutionStatus {
+  PENDING
+  SUCCESS
+  SKIPPED
+  FAILED
+}
+
 enum ActivityType {
   NOTE
   CALL
@@ -205,10 +230,14 @@ model Organization {
   slug      String           @unique
   plan      SubscriptionPlan @default(STARTER)
   isActive  Boolean          @default(true)
+  isAgency  Boolean          @default(false)
+  agencyId  String?
   settings  Json?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
+  agency        Organization?  @relation("AgencyClients", fields: [agencyId], references: [id], onDelete: SetNull)
+  clientOrgs    Organization[] @relation("AgencyClients")
   members       OrganizationMember[]
   teams         Team[]
   companies     Company[]
@@ -216,12 +245,15 @@ model Organization {
   funnels       Funnel[]
   conversations Conversation[]
   campaigns     Campaign[]
+  trackedLinks  TrackedLink[]
   aiAgents      AIAgent[]
   templates     MessageTemplate[]
   workflows     Workflow[]
+  workflowEnrollments WorkflowEnrollment[]
   auditLogs     AuditLog[]
   channelConnections ChannelConnection[]
 
+  @@index([agencyId])
   @@map("organizations")
 }
 
@@ -318,6 +350,7 @@ model Prospect {
   socialProfiles      SocialProfile[]
   socialIdentities    SocialIdentity[]
   consentRecords      ConsentRecord[]
+  workflowEnrollments WorkflowEnrollment[]
 
   @@unique([organizationId, whatsappPhone])
   @@unique([organizationId, email])
@@ -329,18 +362,23 @@ model Prospect {
 // ─── Funnel & Pipeline ───────────────────────────────────────────────────────
 
 model Funnel {
-  id             String @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
   name           String
   description    String?
-  isDefault      Boolean @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  channelType    FunnelChannel @default(GENERIC)
+  entryConfig    Json?
+  isDefault      Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stages        FunnelStage[]
   opportunities Opportunity[]
+  workflows     Workflow[]
+  campaigns     Campaign[]
 
+  @@index([organizationId, channelType])
   @@map("funnels")
 }
 
@@ -646,6 +684,8 @@ model SocialIdentity {
 model Campaign {
   id             String   @id @default(cuid())
   organizationId String
+  funnelId       String?
+  workflowId     String?
   name           String
   description    String?
   status         String   @default("draft")
@@ -656,24 +696,96 @@ model Campaign {
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  funnel       Funnel?      @relation(fields: [funnelId], references: [id], onDelete: SetNull)
+  workflow     Workflow?    @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  trackedLinks TrackedLink[]
 
+  @@index([funnelId])
+  @@index([workflowId])
   @@map("campaigns")
 }
 
-model Workflow {
-  id             String  @id @default(cuid())
+model TrackedLink {
+  id             String   @id @default(cuid())
   organizationId String
-  name           String
-  description    String?
-  trigger        Json
-  steps          Json
-  isActive       Boolean @default(false)
+  campaignId     String?
+  slug           String   @unique
+  destinationUrl String
+  label          String?
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId])
+  @@index([campaignId])
+  @@map("tracked_links")
+}
+
+model Workflow {
+  id             String        @id @default(cuid())
+  organizationId String
+  funnelId       String?
+  name           String
+  description    String?
+  channelType    FunnelChannel @default(GENERIC)
+  trigger        Json          @default("{}")
+  steps          Json          @default("[]")
+  graph          Json?
+  isActive       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  funnel       Funnel?      @relation(fields: [funnelId], references: [id], onDelete: SetNull)
+  campaigns    Campaign[]
+  enrollments  WorkflowEnrollment[]
+
+  @@index([organizationId, funnelId])
   @@map("workflows")
+}
+
+model WorkflowEnrollment {
+  id             String           @id @default(cuid())
+  organizationId String
+  workflowId     String
+  prospectId     String
+  campaignId     String?
+  status         EnrollmentStatus @default(ACTIVE)
+  currentNodeId  String?
+  nextRunAt      DateTime?
+  context        Json?
+  lastError      String?          @db.Text
+  startedAt      DateTime         @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  prospect     Prospect     @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  executions   WorkflowStepExecution[]
+
+  @@unique([workflowId, prospectId])
+  @@index([status, nextRunAt])
+  @@index([organizationId, status])
+  @@map("workflow_enrollments")
+}
+
+model WorkflowStepExecution {
+  id           String              @id @default(cuid())
+  enrollmentId String
+  nodeId       String
+  stepType     String
+  status       StepExecutionStatus @default(PENDING)
+  detail       String?             @db.Text
+  simulated    Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+
+  enrollment WorkflowEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId, createdAt])
+  @@map("workflow_step_executions")
 }
 
 // ─── Compliance & Audit ──────────────────────────────────────────────────────

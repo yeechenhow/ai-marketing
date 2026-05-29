@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { DEFAULT_FUNNEL_STAGES } from "../src/lib/constants";
+import { seedExtendedDemo } from "./seed-extended";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const db = new PrismaClient({ adapter });
@@ -75,23 +76,62 @@ async function main() {
 
   const org = await db.organization.upsert({
     where: { slug: "demo-agency" },
-    update: {},
+    update: { isAgency: true },
     create: {
       name: "Demo Sales Agency",
       slug: "demo-agency",
       plan: "GROWTH",
+      isAgency: true,
     },
   });
 
-  await db.organization.upsert({
+  const acmeOrg = await db.organization.upsert({
     where: { slug: "acme-insurance" },
-    update: {},
+    update: { agencyId: org.id, isAgency: false },
     create: {
       name: "Acme Insurance Group",
       slug: "acme-insurance",
       plan: "STARTER",
+      agencyId: org.id,
+      isAgency: false,
     },
   });
+
+  await db.organization.upsert({
+    where: { slug: "beta-clinic" },
+    update: { agencyId: org.id, isAgency: false },
+    create: {
+      name: "Beta Wellness Clinic",
+      slug: "beta-clinic",
+      plan: "STARTER",
+      agencyId: org.id,
+      isAgency: false,
+    },
+  });
+
+  for (const clientSlug of ["acme-insurance", "beta-clinic"]) {
+    const clientOrg = await db.organization.findUnique({ where: { slug: clientSlug } });
+    if (!clientOrg) continue;
+    const hasFunnel = await db.funnel.findFirst({
+      where: { organizationId: clientOrg.id, isDefault: true },
+    });
+    if (!hasFunnel) {
+      await db.funnel.create({
+        data: {
+          organizationId: clientOrg.id,
+          name: "Default Sales Funnel",
+          isDefault: true,
+          stages: {
+            create: DEFAULT_FUNNEL_STAGES.map((s) => ({
+              name: s.name,
+              order: s.order,
+              probability: s.probability,
+            })),
+          },
+        },
+      });
+    }
+  }
 
   await db.organizationMember.upsert({
     where: {
@@ -274,9 +314,8 @@ async function main() {
       }
     }
 
-    console.log("Seed skipped — demo data already exists.");
-    console.log("  Platform: platform@demo.com / demo1234  (Super Admin → /admin)");
-    console.log("  Manager:  manager@demo.com / demo1234   (Manager → /manager)");
+    await seedExtendedDemo(db, org.id, agent.id);
+    printSeedLogins();
     return;
   }
 
@@ -529,12 +568,17 @@ async function main() {
     });
   }
 
+  await seedExtendedDemo(db, org.id, agent.id);
+  printSeedLogins();
+}
+
+function printSeedLogins() {
   console.log("Seed complete:");
   console.log("  Platform: platform@demo.com / demo1234  (Super Admin → /admin)");
+  console.log("  Agency:   admin@demo.com / demo1234       (Agency Admin → /agency)");
   console.log("  Manager:  manager@demo.com / demo1234   (Manager → /manager)");
-  console.log("  Org:      Demo Sales Agency (demo-agency)");
-  console.log("  Admin:    admin@demo.com / demo1234       (Org Admin → /org)");
   console.log("  Agent:    agent@demo.com / demo1234       (Agent → /dashboard)");
+  console.log("  Clients:  acme-insurance, beta-clinic, gamma-realty, delta-auto");
 }
 
 main()

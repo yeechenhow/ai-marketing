@@ -1,86 +1,34 @@
 import { requireManagerSession } from "@/lib/manager";
-import { db } from "@/lib/db";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/layout/shell";
-import { prospectDisplayName } from "@/lib/utils";
-import Link from "next/link";
+import { PipelinePageView } from "@/components/pipeline/pipeline-page-view";
+import { loadPipelineBoard } from "@/lib/pipeline/load-pipeline-board";
+import { FUNNEL_CHANNEL_LABELS } from "@/lib/workflows/types";
 
-export default async function ManagerPipelinePage() {
+export default async function ManagerPipelinePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ funnelId?: string }>;
+}) {
   const { organization } = await requireManagerSession();
+  const { funnelId } = await searchParams;
+  const board = await loadPipelineBoard(organization.id, funnelId);
 
-  const funnel = await db.funnel.findFirst({
-    where: { organizationId: organization.id, isDefault: true },
-    include: { stages: { orderBy: { order: "asc" } } },
-  });
-
-  if (!funnel) {
+  if (!board) {
     return (
-      <PageHeader title="Team Pipeline" description="No default funnel configured." />
+      <PageHeader title="Team Pipeline" description="No funnels configured for this organization." />
     );
   }
 
-  const opportunities = await db.opportunity.findMany({
-    where: { funnelId: funnel.id, status: "OPEN" },
-    include: {
-      prospect: { include: { assignedTo: true } },
-      stage: true,
-    },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const byStage = funnel.stages.map((stage) => ({
-    stage,
-    items: opportunities.filter((o) => o.stageId === stage.id),
-  }));
-
   return (
-    <div>
-      <PageHeader
+    <Suspense fallback={<p className="text-sm text-slate-500">Loading board…</p>}>
+      <PipelinePageView
         title="Team Pipeline"
-        description={`${funnel.name} — all agents, full team view`}
+        description={`${board.funnelName} · ${FUNNEL_CHANNEL_LABELS[board.channelType]} — full team view`}
+        board={board}
+        prospectHrefPrefix="/dashboard/prospects"
+        showAssignee
       />
-
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {byStage.map(({ stage, items }) => (
-          <div
-            key={stage.id}
-            className="min-w-[300px] flex-shrink-0 rounded-xl border border-slate-200 bg-white"
-          >
-            <div className="border-b border-slate-100 bg-amber-50/50 p-4">
-              <h3 className="font-semibold text-slate-900">{stage.name}</h3>
-              <p className="text-xs text-slate-500">
-                {items.length} deals · {Math.round(stage.probability * 100)}% probability
-              </p>
-            </div>
-            <div className="space-y-2 p-3">
-              {items.map((opp) => (
-                <div
-                  key={opp.id}
-                  className="rounded-lg border border-slate-100 p-3 hover:border-amber-200"
-                >
-                  <p className="font-medium text-slate-900">
-                    {prospectDisplayName(
-                      opp.prospect.firstName,
-                      opp.prospect.lastName,
-                      opp.prospect.email,
-                    )}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {opp.prospect.assignedTo?.name ?? "Unassigned"}
-                  </p>
-                  {opp.value != null && (
-                    <p className="mt-1 text-sm font-medium text-emerald-600">
-                      ${opp.value.toLocaleString()}
-                    </p>
-                  )}
-                </div>
-              ))}
-              {items.length === 0 && (
-                <p className="p-2 text-center text-xs text-slate-400">Empty</p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    </Suspense>
   );
 }

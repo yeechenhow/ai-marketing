@@ -149,7 +149,42 @@ const campaignSchema = z.object({
   businessPhone: z.string().optional(),
   channelConnectionId: z.string().optional(),
   welcomeMessage: z.string().optional(),
+  funnelId: z.string().optional(),
+  workflowId: z.string().optional(),
 });
+
+async function resolveCampaignLinks(
+  organizationId: string,
+  funnelId?: string,
+  workflowId?: string,
+): Promise<{ funnelId: string | null; workflowId: string | null }> {
+  let resolvedFunnelId: string | null = null;
+  let resolvedWorkflowId: string | null = null;
+
+  if (funnelId) {
+    const funnel = await db.funnel.findFirst({
+      where: { id: funnelId, organizationId },
+      select: { id: true },
+    });
+    if (!funnel) throw new Error("Funnel not found");
+    resolvedFunnelId = funnel.id;
+  }
+
+  if (workflowId) {
+    const workflow = await db.workflow.findFirst({
+      where: { id: workflowId, organizationId },
+      select: { id: true, funnelId: true },
+    });
+    if (!workflow) throw new Error("Workflow not found");
+    resolvedWorkflowId = workflow.id;
+    // If the workflow belongs to a funnel and no funnel was chosen, inherit it.
+    if (!resolvedFunnelId && workflow.funnelId) {
+      resolvedFunnelId = workflow.funnelId;
+    }
+  }
+
+  return { funnelId: resolvedFunnelId, workflowId: resolvedWorkflowId };
+}
 
 const aiAgentSchema = z.object({
   name: z.string().min(1, "Agent name is required"),
@@ -169,10 +204,12 @@ const templateSchema = z.object({
 const funnelSchema = z.object({
   name: z.string().min(1, "Funnel name is required"),
   description: z.string().optional(),
+  channelType: z.string().optional(),
 });
 
 export async function createCampaign(formData: FormData) {
   const session = await requireOrgAdmin();
+  const orgId = session.user.organizationId!;
   const parsed = campaignSchema.parse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
@@ -181,11 +218,15 @@ export async function createCampaign(formData: FormData) {
     businessPhone: (formData.get("businessPhone") as string)?.trim() || undefined,
     channelConnectionId: (formData.get("channelConnectionId") as string)?.trim() || undefined,
     welcomeMessage: (formData.get("welcomeMessage") as string)?.trim() || undefined,
+    funnelId: (formData.get("funnelId") as string)?.trim() || undefined,
+    workflowId: (formData.get("workflowId") as string)?.trim() || undefined,
   });
 
   if (parsed.campaignType === "whatsapp_onboarding" && !parsed.prefilledMessage) {
     throw new Error("Prefilled WhatsApp message is required for onboarding campaigns");
   }
+
+  const links = await resolveCampaignLinks(orgId, parsed.funnelId, parsed.workflowId);
 
   const config =
     parsed.campaignType === "whatsapp_onboarding"
@@ -199,7 +240,9 @@ export async function createCampaign(formData: FormData) {
 
   const campaign = await db.campaign.create({
     data: {
-      organizationId: session.user.organizationId!,
+      organizationId: orgId,
+      funnelId: links.funnelId,
+      workflowId: links.workflowId,
       name: parsed.name,
       description: parsed.description,
       status: parsed.campaignType === "whatsapp_onboarding" ? "active" : "draft",
@@ -209,11 +252,34 @@ export async function createCampaign(formData: FormData) {
   });
 
   revalidatePath("/org/campaigns");
-  redirect(
-    parsed.campaignType === "whatsapp_onboarding"
-      ? `/org/campaigns/${campaign.id}`
-      : "/org/campaigns",
-  );
+  redirect(`/org/campaigns/${campaign.id}`);
+}
+
+export async function updateCampaignLinks(formData: FormData) {
+  const session = await requireOrgAdmin();
+  const orgId = session.user.organizationId!;
+
+  const campaignId = (formData.get("campaignId") as string)?.trim();
+  if (!campaignId) throw new Error("Campaign is required");
+
+  const campaign = await db.campaign.findFirst({
+    where: { id: campaignId, organizationId: orgId },
+    select: { id: true },
+  });
+  if (!campaign) throw new Error("Campaign not found");
+
+  const funnelId = (formData.get("funnelId") as string)?.trim() || undefined;
+  const workflowId = (formData.get("workflowId") as string)?.trim() || undefined;
+
+  const links = await resolveCampaignLinks(orgId, funnelId, workflowId);
+
+  await db.campaign.update({
+    where: { id: campaignId },
+    data: { funnelId: links.funnelId, workflowId: links.workflowId },
+  });
+
+  revalidatePath("/org/campaigns");
+  revalidatePath(`/org/campaigns/${campaignId}`);
 }
 
 export async function launchCampaign(campaignId: string) {
@@ -319,15 +385,17 @@ export async function createFunnel(formData: FormData) {
   const parsed = funnelSchema.parse({
     name: formData.get("name"),
     description: formData.get("description") || undefined,
+    channelType: formData.get("channelType") || "GENERIC",
   });
 
   const { DEFAULT_FUNNEL_STAGES } = await import("@/lib/constants");
 
-  await db.funnel.create({
+  const funnel = await db.funnel.create({
     data: {
       organizationId: session.user.organizationId!,
       name: parsed.name,
       description: parsed.description,
+      channelType: parsed.channelType as import("@/generated/prisma/client").FunnelChannel,
       stages: {
         create: DEFAULT_FUNNEL_STAGES.map((s) => ({
           name: s.name,
@@ -339,5 +407,5 @@ export async function createFunnel(formData: FormData) {
   });
 
   revalidatePath("/org/pipelines");
-  redirect("/org/pipelines");
+  redirect(`/org/pipelines/${funnel.id}`);
 }

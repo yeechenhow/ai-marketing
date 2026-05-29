@@ -1,19 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCampaign } from "@/lib/actions/org";
+import { FUNNEL_CHANNEL_LABELS } from "@/lib/workflows/types";
+import type { FunnelChannel } from "@/generated/prisma/client";
+
+type FunnelOption = { id: string; name: string; channelType: FunnelChannel };
+type WorkflowOption = {
+  id: string;
+  name: string;
+  funnelId: string | null;
+  isActive: boolean;
+};
 
 export function CampaignForm({
   whatsappChannels = [],
+  funnels = [],
+  workflows = [],
 }: {
   whatsappChannels?: { id: string; name: string; externalId: string | null }[];
+  funnels?: FunnelOption[];
+  workflows?: WorkflowOption[];
 }) {
   const [campaignType, setCampaignType] = useState<"standard" | "whatsapp_onboarding">(
     "whatsapp_onboarding",
   );
+  const [funnelId, setFunnelId] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+
+  // When a funnel is selected, prefer workflows linked to that funnel.
+  const filteredWorkflows = useMemo(() => {
+    if (!funnelId) return workflows;
+    const linked = workflows.filter((w) => w.funnelId === funnelId);
+    return linked.length > 0 ? linked : workflows;
+  }, [funnelId, workflows]);
 
   return (
     <form action={createCampaign} className="max-w-lg space-y-4">
@@ -53,6 +76,58 @@ export function CampaignForm({
           placeholder="What this campaign does and who it targets"
           className="flex w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <p className="mb-3 text-sm font-semibold text-slate-900">Automation</p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="funnelId" className="mb-1 block text-sm font-medium text-slate-700">
+              Funnel
+            </label>
+            <select
+              id="funnelId"
+              name="funnelId"
+              value={funnelId}
+              onChange={(e) => {
+                setFunnelId(e.target.value);
+                setWorkflowId("");
+              }}
+              className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">No funnel</option>
+              {funnels.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({FUNNEL_CHANNEL_LABELS[f.channelType]})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="workflowId" className="mb-1 block text-sm font-medium text-slate-700">
+              Workflow
+            </label>
+            <select
+              id="workflowId"
+              name="workflowId"
+              value={workflowId}
+              onChange={(e) => setWorkflowId(e.target.value)}
+              className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">No workflow (manual)</option>
+              {filteredWorkflows.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                  {w.isActive ? "" : " (draft — won't run until activated)"}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Prospects entering this campaign auto-enroll into the workflow. Activate the
+              workflow for it to run.
+            </p>
+          </div>
+        </div>
       </div>
 
       {campaignType === "whatsapp_onboarding" && (

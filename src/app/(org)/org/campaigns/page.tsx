@@ -13,6 +13,10 @@ export default async function OrgCampaignsPage() {
 
   const campaigns = await db.campaign.findMany({
     where: { organizationId: organization.id },
+    include: {
+      workflow: { select: { id: true, name: true, isActive: true } },
+      funnel: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -35,6 +39,7 @@ export default async function OrgCampaignsPage() {
               <tr>
                 <th className="px-4 py-3">Campaign</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Automation</th>
                 <th className="px-4 py-3">Started</th>
                 <th className="px-4 py-3">Created</th>
                 <th className="px-4 py-3">Actions</th>
@@ -53,6 +58,19 @@ export default async function OrgCampaignsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant="secondary">{c.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.workflow ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Badge variant={c.workflow.isActive ? "success" : "warning"}>
+                          {c.workflow.name}
+                        </Badge>
+                      </span>
+                    ) : c.funnel ? (
+                      <span className="text-xs text-slate-500">{c.funnel.name}</span>
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-500">
                     {c.startedAt

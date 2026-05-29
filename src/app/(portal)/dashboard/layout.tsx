@@ -37,9 +37,9 @@ export default async function DashboardLayout({
         subtitle="AI Sales OS"
         items={navItems}
       />
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col bg-slate-50">
         <PortalHeader portalLabel="Agent Portal" showOrgLink />
-        <main className="flex-1 overflow-auto p-8">{children}</main>
+        <main className="flex-1 overflow-auto bg-slate-50 p-8">{children}</main>
       </div>
     </div>
   );

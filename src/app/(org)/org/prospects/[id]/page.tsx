@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GenerateProfileButton } from "@/components/prospects/generate-profile-button";
+import { ProspectAutomationPanel } from "@/components/prospects/prospect-automation-panel";
 import { LIFECYCLE_STAGE_COLORS, LIFECYCLE_STAGE_LABELS } from "@/lib/constants";
 import { prospectDisplayName } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -69,6 +70,14 @@ export default async function OrgProspectDetailPage({
         ) : prospect.whatsappPhone ? (
           <Badge variant="warning">Awaiting registration (Step 2)</Badge>
         ) : null}
+      </div>
+
+      <div className="mb-6">
+        <ProspectAutomationPanel
+          prospectId={id}
+          organizationId={organization.id}
+          workflowBuilderPrefix="/org/workflows"
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

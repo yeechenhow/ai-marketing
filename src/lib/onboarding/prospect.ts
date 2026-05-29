@@ -146,6 +146,9 @@ export async function upsertProspectFromWhatsApp(input: {
         },
       },
     });
+
+    const { resumeWorkflowsForProspect } = await import("@/lib/workflows/engine");
+    await resumeWorkflowsForProspect({ prospectId: prospect.id, event: "replied" });
   }
 
   const token = signOnboardingToken({

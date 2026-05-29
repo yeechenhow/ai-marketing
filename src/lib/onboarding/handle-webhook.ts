@@ -8,6 +8,7 @@ import {
 } from "@/lib/onboarding/whatsapp-webhook";
 import type { WhatsAppWebhookPayload } from "@/lib/onboarding/whatsapp-types";
 import { upsertProspectFromWhatsApp } from "@/lib/onboarding/prospect";
+import { enrollFromCampaign } from "@/lib/workflows/engine";
 import { sendWhatsAppTextMessage } from "@/lib/onboarding/whatsapp-send";
 import {
   getWhatsAppVerifyToken,
@@ -139,6 +140,13 @@ export async function handleWhatsAppWebhookPost(
     externalMessageId: inbound.messageId,
     campaignId,
     campaignName,
+  });
+
+  // Auto-enroll the prospect into the campaign's workflow (if active).
+  await enrollFromCampaign({
+    organizationId,
+    prospectId: result.prospect.id,
+    campaignId,
   });
 
   const replyText = buildWelcomeReply({

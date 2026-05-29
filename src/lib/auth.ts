@@ -2,7 +2,9 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
+import { resolveActiveOrganization } from "@/lib/agency/access";
 import type { PlatformRole } from "@/generated/prisma/client";
 
 declare module "next-auth" {
@@ -14,6 +16,8 @@ declare module "next-auth" {
       platformRole: PlatformRole;
       organizationId?: string;
       orgRole?: PlatformRole;
+      organizationName?: string;
+      isAgencyOrganization?: boolean;
     };
   }
 
@@ -65,26 +69,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id!;
         token.platformRole = user.platformRole;
       }
-
-      if (token.id) {
-        const membership = await db.organizationMember.findFirst({
-          where: { userId: token.id as string, isActive: true },
-          orderBy: { joinedAt: "asc" },
-        });
-        if (membership) {
-          token.organizationId = membership.organizationId;
-          token.orgRole = membership.role;
-        }
-      }
-
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
+      if (session.user && token.id) {
         session.user.id = token.id as string;
         session.user.platformRole = token.platformRole as PlatformRole;
-        session.user.organizationId = token.organizationId as string | undefined;
-        session.user.orgRole = token.orgRole as PlatformRole | undefined;
+
+        const cookieStore = await cookies();
+        const preferredOrgId = cookieStore.get("active-org-id")?.value;
+
+        const active = await resolveActiveOrganization(
+          token.id as string,
+          preferredOrgId,
+        );
+
+        if (active) {
+          session.user.organizationId = active.id;
+          session.user.orgRole = active.role;
+          session.user.organizationName = active.name;
+          session.user.isAgencyOrganization = active.isAgency;
+        }
       }
       return session;
     },

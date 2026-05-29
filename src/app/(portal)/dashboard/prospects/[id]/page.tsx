@@ -9,6 +9,7 @@ import { GenerateProfileButton } from "@/components/prospects/generate-profile-b
 import { ApplyRecommendationButton } from "@/components/prospects/apply-recommendation-button";
 import { AddNoteForm, AddTaskForm } from "@/components/prospects/prospect-activity-forms";
 import { CompleteTaskButton } from "@/components/prospects/complete-task-button";
+import { ProspectAutomationPanel } from "@/components/prospects/prospect-automation-panel";
 import { LIFECYCLE_STAGE_COLORS, LIFECYCLE_STAGE_LABELS } from "@/lib/constants";
 import { prospectDisplayName } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -126,6 +127,12 @@ export default async function ProspectDetailPage({
         </div>
 
         <div className="space-y-6">
+          <ProspectAutomationPanel
+            prospectId={id}
+            organizationId={session.user.organizationId}
+            workflowBuilderPrefix="/org/workflows"
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Customer 360</CardTitle>
