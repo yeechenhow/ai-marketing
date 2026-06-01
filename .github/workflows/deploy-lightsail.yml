@@ -19,6 +19,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validate secrets
+        run: |
+          set -euo pipefail
+          HOST="${{ secrets.LIGHTSAIL_HOST }}"
+          if [[ "$HOST" =~ ^172\. ]] || [[ "$HOST" =~ ^10\. ]] || [[ "$HOST" =~ ^192\.168\. ]]; then
+            echo "ERROR: LIGHTSAIL_HOST is a private IP ($HOST)."
+            echo "Use your public Static IP from Lightsail (e.g. 18.136.137.5), NOT 172.26.x.x"
+            exit 1
+          fi
+          if [[ -z "$HOST" ]]; then
+            echo "ERROR: LIGHTSAIL_HOST is empty"
+            exit 1
+          fi
+          echo "Host looks like a public IP."
+
       - name: Configure SSH key
         env:
           SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
