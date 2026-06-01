@@ -28,7 +28,14 @@ npm install
 
 echo "==> Syncing database schema..."
 npx prisma generate
-npx prisma db push --accept-data-loss
+if ! npx prisma db push --accept-data-loss; then
+  echo ""
+  echo "ERROR: Database sync failed."
+  echo "  - If DATABASE_URL uses 127.0.0.1, PostgreSQL must run ON this server."
+  echo "  - If you use Lightsail Database, use that endpoint in DATABASE_URL (not 127.0.0.1)."
+  echo "  - Run: bash scripts/check-lightsail-server.sh"
+  exit 1
+fi
 
 echo "==> Seeding demo data..."
 ALLOW_DEMO_SEED=true npm run db:seed || echo "WARN: demo seed skipped or partial (may already exist)."
