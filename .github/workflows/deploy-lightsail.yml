@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 concurrency:
   group: deploy-lightsail
@@ -15,16 +16,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.LIGHTSAIL_HOST }}
-          username: ${{ secrets.LIGHTSAIL_USER }}
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          script_stop: true
-          command_timeout: 30m
-          script: |
-            cd ~/ai-marketing
-            git pull origin main
-            chmod +x scripts/deploy-production.sh
-            bash scripts/deploy-production.sh
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.LIGHTSAIL_SSH_KEY }}" > ~/.ssh/lightsail.pem
+          chmod 600 ~/.ssh/lightsail.pem
+          ssh-keyscan -H "${{ secrets.LIGHTSAIL_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/lightsail.pem -o BatchMode=yes -o ConnectTimeout=15 \
+            "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
+            'echo "SSH OK — connected as $(whoami) on $(hostname)"'
+
+      - name: Sync files to server
+        run: |
+          ssh -i ~/.ssh/lightsail.pem \
+            "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
+            'mkdir -p ~/ai-marketing'
+          rsync -avz \
+            --exclude node_modules \
+            --exclude .next \
+            --exclude .git \
+            --exclude .env \
+            --exclude .env.local \
+            --exclude .env.production \
+            -e "ssh -i ~/.ssh/lightsail.pem -o StrictHostKeyChecking=yes" \
+            ./ "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}:~/ai-marketing/"
+
+      - name: Run deploy script
+        run: |
+          ssh -i ~/.ssh/lightsail.pem \
+            "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
+            'chmod +x ~/ai-marketing/scripts/deploy-production.sh && SKIP_GIT_PULL=true bash ~/ai-marketing/scripts/deploy-production.sh'
