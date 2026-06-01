@@ -19,21 +19,46 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure SSH
+      - name: Configure SSH key
+        env:
+          SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.LIGHTSAIL_SSH_KEY }}" > ~/.ssh/lightsail.pem
+          chmod 700 ~/.ssh
+
+          if [[ -z "${SSH_KEY}" ]]; then
+            echo "ERROR: LIGHTSAIL_SSH_KEY secret is empty or not set."
+            exit 1
+          fi
+
+          # Write PEM (strip Windows CR if pasted from Notepad)
+          printf '%s\n' "${SSH_KEY}" | tr -d '\r' > ~/.ssh/lightsail.pem
           chmod 600 ~/.ssh/lightsail.pem
+
+          if ! ssh-keygen -y -f ~/.ssh/lightsail.pem >/dev/null 2>&1; then
+            echo "ERROR: LIGHTSAIL_SSH_KEY is not a valid private key."
+            echo "Re-paste the full .pem file (including BEGIN/END lines) into GitHub secrets."
+            exit 1
+          fi
+
           ssh-keyscan -H "${{ secrets.LIGHTSAIL_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          echo "SSH key OK."
 
       - name: Test SSH connection
         run: |
-          ssh -i ~/.ssh/lightsail.pem -o BatchMode=yes -o ConnectTimeout=15 \
+          set -euo pipefail
+          echo "Connecting to ${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }} ..."
+          ssh -i ~/.ssh/lightsail.pem \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o StrictHostKeyChecking=yes \
             "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
             'echo "SSH OK — connected as $(whoami) on $(hostname)"'
 
       - name: Sync files to server
         run: |
+          set -euo pipefail
           ssh -i ~/.ssh/lightsail.pem \
             "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
             'mkdir -p ~/ai-marketing'
@@ -49,6 +74,7 @@ jobs:
 
       - name: Run deploy script
         run: |
+          set -euo pipefail
           ssh -i ~/.ssh/lightsail.pem \
             "${{ secrets.LIGHTSAIL_USER }}@${{ secrets.LIGHTSAIL_HOST }}" \
             'chmod +x ~/ai-marketing/scripts/deploy-production.sh && SKIP_GIT_PULL=true bash ~/ai-marketing/scripts/deploy-production.sh'
